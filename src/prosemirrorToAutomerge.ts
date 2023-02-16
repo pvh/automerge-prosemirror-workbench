@@ -24,10 +24,13 @@ function handleReplaceStep<T>(
 ): void {
   console.log(step)
   const { from, to, slice } = step
-  const newText = (slice.content.childCount == 0) ? "" : slice.content.textBetween(0, 1)
   
-  AutomergeUnstable.splice(doc, attribute as string, prosemirrorPositionToAutomergePosition(from), prosemirrorPositionToAutomergePosition(to), newText)
-  console.log(doc.text.join(""))
+  const start = prosemirrorPositionToAutomergePosition(from)
+  const count = prosemirrorPositionToAutomergePosition(to) - prosemirrorPositionToAutomergePosition(from)
+  const newText = (slice.content.childCount == 0) ? "" : slice.content.textBetween(0, slice.size)
+  AutomergeUnstable.splice(doc, attribute as string, start, count, newText)
+
+  console.log(doc.text.join(","))
 }
 
 export const prosemirrorTransactionToAutomerge = <T>(

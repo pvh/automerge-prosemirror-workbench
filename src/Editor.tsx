@@ -62,10 +62,10 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
         return // too late
       }
 
-      if (!doc.text) {
+      //if (!doc.text) {
         console.log("initializing text")
         handle.change(d => {d.text = new Text("\n")})
-      }
+      //}
 
       /*const transaction = createProsemirrorTransactionOnChange(
         view.state,
