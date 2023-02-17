@@ -1,6 +1,10 @@
-import { Doc, Text, Patch, ChangeFn, ChangeOptions, Extend } from "@automerge/automerge"
+
+import { Doc, Text, Patch, ChangeFn, ChangeOptions, Extend, PutPatch, InsertPatch } from "@automerge/automerge"
 import { unstable as AutomergeUnstable } from "@automerge/automerge"
 import { EditorState } from "prosemirror-state"
+import { schema } from "prosemirror-schema-basic"
+import { Fragment, Slice } from "prosemirror-model"
+
 import {
   AddMarkStep,
   RemoveMarkStep,
@@ -55,6 +59,50 @@ export const prosemirrorTransactionToAutomerge = <T>(
           "We encountered a Prosemirror transaction step type we can't handle."
         )
       }
+    }
+  })
+}
+
+function handlePutPatch(p: PutPatch): Step {
+  /* let nodes = []
+  
+  const depth = 0
+  const content = p.value as string
+  const from = p.path[-1] as number // uhhhh... maybe.
+  nodes.push(schema.text(content))
+
+  let fragment = Fragment.fromArray(nodes)
+  let slice = new Slice(fragment, depth, depth)
+  return new ReplaceStep(from, from, slice)
+  */
+}
+
+function handleInsertPatch(p: InsertPatch): Step {
+  let nodes = []
+  
+  const depth = 0
+  const content = p.values.join("")
+  const from = p.path[p.path.length - 1] as number // uhhhh... maybe.
+  nodes.push(schema.text(content))
+
+  let fragment = Fragment.fromArray(nodes)
+  let slice = new Slice(fragment, depth, depth)
+  return new ReplaceStep(from, from, slice)
+}
+
+export function patchToProsemirrorTransaction(patches: Patch[]): Step[] {
+  // we filter out put patches that recreate the entire document
+  return patches.filter(p => p.action !== "put").map((p) => {
+    console.log('applying', p)
+    switch(p.action) {
+      case "put":
+        return handlePutPatch(p)
+        break
+      case "insert": 
+        return handleInsertPatch(p)
+        break
+      default:
+        throw new Error("We encountered a Prosemirror transaction step type we can't handle.")
     }
   })
 }

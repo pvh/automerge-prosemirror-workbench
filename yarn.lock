@@ -594,10 +594,10 @@ automerge-repo-storage-localforage@^0.0.45:
     automerge-repo "^0.0.45"
     localforage "^1.10.0"
 
-automerge-repo@0.0.48:
-  version "0.0.48"
-  resolved "https://registry.yarnpkg.com/automerge-repo/-/automerge-repo-0.0.48.tgz#7e8a83eb121dead89f82473bbcb05d5408210136"
-  integrity sha512-XCkAXqr+xJatptfDRV8gu4XX2P3ZQcmAXhNkTFyXP5HrH1FaxRCOjRtYEEEJ4LmKqdDNbCegPH079snuH/XLmA==
+automerge-repo@0.0.49:
+  version "0.0.49"
+  resolved "https://registry.yarnpkg.com/automerge-repo/-/automerge-repo-0.0.49.tgz#edfc3c189040f0abc4c5696d152af6b8f46bfaaf"
+  integrity sha512-NjL3/GXVuqrFA8K9yWGS5njJ3rBGK8QWHu6M0Y26z9OrMxLNAkBIgku0XTuFkB95RTn/NLTwKIlI73aL0It42w==
   dependencies:
     cbor-x "^1.3.0"
     debug "^4.3.4"

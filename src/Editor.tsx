@@ -13,6 +13,7 @@ import { automergePlugin } from "./automerge-prosemirror"
 import { DOMParser as ProseDOMParser } from "prosemirror-model"
 
 import { Text } from "@automerge/automerge"
+import { patchToProsemirrorTransaction } from "./prosemirrorToAutomerge"
 
 export type EditorProps<T> = {
   handle: DocHandle<T>
@@ -35,63 +36,51 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
   const editorRoot = useRef<HTMLDivElement>(null!)
 
   useEffect(() => {
+    let editorConfig = {
+      schema,
+      history,
+      plugins: [
+        automergePlugin(handle, attribute),
+        keymap({
+          ...baseKeymap,
+          "Mod-b": toggleBold,
+          "Mod-i": toggleItalic,
+          "Mod-z": undo,
+          "Mod-y": redo,
+          "Mod-Shift-z": redo,
+        }),
+      ],
+    }      
+
+    let state = EditorState.create(editorConfig)
+    const view = new EditorView(editorRoot.current, { state })
+
     handle.value().then((doc) => {
-      var dom = new DOMParser().parseFromString(handle.doc.text, "text/html");
-
-      let editorConfig = {
-        schema,
-        history,
-        plugins: [
-          automergePlugin(handle, attribute),
-          keymap({
-            ...baseKeymap,
-            "Mod-b": toggleBold,
-            "Mod-i": toggleItalic,
-            "Mod-z": undo,
-            "Mod-y": redo,
-            "Mod-Shift-z": redo,
-          }),
-        ],
-        doc: ProseDOMParser.fromSchema(schema).parse(dom),
-      }      
-
-      let state = EditorState.create(editorConfig)
-      const view = new EditorView(editorRoot.current, { state })
-
       if (view.isDestroyed) {
         return // too late
       }
 
-      //if (!doc.text) {
+      if (!doc.text) {
         console.log("initializing text")
         handle.change(d => {d.text = new Text("\n")})
-      //}
-
-      /*const transaction = createProsemirrorTransactionOnChange(
-        view.state,
-        attribute,
-        doc
-      )*/
-      /* const transaction = view.state.tr
-      transaction.insertText(doc[attribute])
-      view.updateState(view.state.apply(transaction)) */
+      }
     })
 
-    /* const onPatch = (args: DocHandlePatchEvent<T>) => {
-      const transaction = createProsemirrorTransactionOnChange(
-        view.state,
-        attribute,
-        args.handle.doc
-      )
-      view.updateState(view.state.apply(transaction))
+    const onPatch = (arg: DocHandlePatchPayload<T>) => {        
+      console.log("patch", arg)
+      let tr = view.state.tr
+      const steps = patchToProsemirrorTransaction(arg.patches)
+      console.log(steps)
+      steps.map(s => tr.step(s))
+      view.updateState(view.state.apply(tr)) 
     }
-    handle.on("change", onChange)
-    */ 
+    handle.on("patch", onPatch)
+
     // move this out, we're in a then
     return () => {
       // console.log("cleaning up")
-      // handle.off("change", onChange)
-      // view.destroy()
+      handle.off("change", onPatch)
+      view.destroy()
     }
   }, [handle, attribute])
   
