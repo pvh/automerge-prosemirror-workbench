@@ -10,8 +10,6 @@ import { EditorView } from "prosemirror-view"
 import { DocHandle, DocHandlePatchPayload } from "automerge-repo"
 import { automergePlugin } from "./automerge-prosemirror"
 
-import { DOMParser as ProseDOMParser } from "prosemirror-model"
-
 import { Text } from "@automerge/automerge"
 import { patchToProsemirrorTransaction } from "./prosemirrorToAutomerge"
 
@@ -62,24 +60,27 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
 
       if (!doc.text) {
         console.log("initializing text")
-        handle.change(d => {d.text = new Text("\n")})
+        handle.change(d => {d.text = new Text("")})
       }
     })
 
-    const onPatch = (arg: DocHandlePatchPayload<T>) => {        
+    const onPatch = (arg: DocHandlePatchPayload<T>) => {
+      try {
       console.log("patch", arg)
       let tr = view.state.tr
       const steps = patchToProsemirrorTransaction(arg.patches)
       console.log(steps)
       steps.map(s => tr.step(s))
+      
       view.updateState(view.state.apply(tr)) 
+      } catch (e) { console.log(e); debugger }
     }
     handle.on("patch", onPatch)
 
     // move this out, we're in a then
     return () => {
       // console.log("cleaning up")
-      handle.off("change", onPatch)
+      handle.off("patch", onPatch)
       view.destroy()
     }
   }, [handle, attribute])

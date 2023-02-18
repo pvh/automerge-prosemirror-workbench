@@ -15,7 +15,6 @@ export const automergePlugin = <T>(
     state: {
       init(config, instance) { },
       apply(tr, value, oldState) {
-        console.log("apply")
         prosemirrorTransactionToAutomerge(
           tr.steps,
           changeDoc,

@@ -12,6 +12,7 @@ import {
   ReplaceStep,
   Step,
 } from "prosemirror-transform"
+import { Value } from "@automerge/automerge-wasm"
 
 function prosemirrorPositionToAutomergePosition(
   position: number,
@@ -64,30 +65,61 @@ export const prosemirrorTransactionToAutomerge = <T>(
 }
 
 function handlePutPatch(p: PutPatch): Step {
-  /* let nodes = []
-  
-  const depth = 0
-  const content = p.value as string
-  const from = p.path[-1] as number // uhhhh... maybe.
-  nodes.push(schema.text(content))
+  throw new Error("Not implemented")
+}
 
-  let fragment = Fragment.fromArray(nodes)
-  let slice = new Slice(fragment, depth, depth)
-  return new ReplaceStep(from, from, slice)
+function patchContentToFragment(values: Value[]) {
+  const text = values.join("")
+  const BLOCK_MARKER = "\n"
+  let blocks = text.split(BLOCK_MARKER)
+
+  let depth = blocks.length > 1 ? 1 : 0
+
+  // blocks: [ "text the first", "second text", "text" ]
+  //          ^ no pgh break    ^ pgh break    ^ pgh break 2
+
+  // the first text node here doesn't get a paragraph break
+  // we should already have a paragraph that we're tacking this node onto
+  
+  /*
+  let block = blocks.shift()
+  if (!block) {
+    let node = schema.node("paragraph", {}, [])
+    nodes.push(node)
+  } else {
+    if (blocks.length === 0) {
+      nodes.push(schema.text(block))
+    } else {
+      nodes.push(schema.node("paragraph", {}, schema.text(block)))
+    }
+  }
   */
+
+  // get the head of the list
+  // if it's an empty value, push in a new empty paragraph
+  // ELSE
+    // if there's no more blocks, just append this text
+    // and if there are more blocks after this, put it into a new paragraph containing the text (!?)
+  
+  // NOW FOR THE REST
+    // empty blocks just push in an empty paragraph
+    // non-empty blocks push in a filled paragraph
+    
+  const nodes = blocks.map((block) => 
+    schema.node("paragraph", {}, block.length ? schema.text(block) : [])
+  )
+
+  return Fragment.fromArray(nodes)
 }
 
 function handleInsertPatch(p: InsertPatch): Step {
-  let nodes = []
-  
-  const depth = 0
-  const content = p.values.join("")
-  const from = p.path[p.path.length - 1] as number // uhhhh... maybe.
-  nodes.push(schema.text(content))
 
-  let fragment = Fragment.fromArray(nodes)
-  let slice = new Slice(fragment, depth, depth)
-  return new ReplaceStep(from, from, slice)
+  const depth = 0
+  const from = p.path[p.path.length - 1] as number // uhhhh... maybe.
+
+  const fragment = patchContentToFragment(p.values)
+
+  return new ReplaceStep(from, from, new Slice(fragment, depth, depth))
 }
 
 export function patchToProsemirrorTransaction(patches: Patch[]): Step[] {
