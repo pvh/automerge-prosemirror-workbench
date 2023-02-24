@@ -8,10 +8,9 @@ import { schema } from "prosemirror-schema-basic"
 import { MarkType } from "prosemirror-model"
 import { EditorView } from "prosemirror-view"
 import { DocHandle, DocHandlePatchPayload } from "automerge-repo"
-import { automergePlugin } from "./automerge-prosemirror"
+import { automergePlugin, convertPatchToProsemirrorTransaction } from "./automerge-prosemirror"
 
 import { Text } from "@automerge/automerge"
-import { patchToProsemirrorTransaction } from "./prosemirrorToAutomerge"
 
 export type EditorProps<T> = {
   handle: DocHandle<T>
@@ -66,13 +65,8 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
 
     const onPatch = (arg: DocHandlePatchPayload<T>) => {
       try {
-      console.log("patch", arg)
-      let tr = view.state.tr
-      const steps = patchToProsemirrorTransaction(arg.patches)
-      console.log(steps)
-      steps.map(s => tr.step(s))
-      
-      view.updateState(view.state.apply(tr)) 
+        const tr = convertPatchToProsemirrorTransaction(view.state.tr, arg.patches)
+        view.updateState(view.state.apply(tr)) 
       } catch (e) { console.log(e); debugger }
     }
     handle.on("patch", onPatch)

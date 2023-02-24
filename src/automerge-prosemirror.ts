@@ -1,6 +1,7 @@
-import { PluginKey, Plugin, EditorState } from "prosemirror-state"
+import { PluginKey, Plugin, EditorState, Transaction } from "prosemirror-state"
 import { DocHandle } from "automerge-repo"
-import { prosemirrorTransactionToAutomerge } from "./prosemirrorToAutomerge"
+import { patchToProsemirrorTransaction, prosemirrorTransactionToAutomerge } from "./prosemirrorToAutomerge"
+import * as Automerge from "@automerge/automerge"
 export const automergePluginKey = new PluginKey(
   "automergeProsemirror"
 )
@@ -13,18 +14,32 @@ export const automergePlugin = <T>(
   const plugin = new Plugin({
     key: automergePluginKey,
     state: {
-      init(config, instance) { },
+      init(config, instance) {
+        return { heads: [] }
+      },
       apply(tr, value, oldState) {
+        const meta = tr.getMeta(automergePluginKey)
+        if (meta) {
+          return { heads: meta.heads }
+        }
+
         prosemirrorTransactionToAutomerge(
           tr.steps,
           changeDoc,
           attribute,
           oldState
         )
-        return { }
+
+        return { heads: Automerge.getBackend(handle.doc).getHeads() }
       },
     },
   })
 
   return plugin
+}
+
+export function convertPatchToProsemirrorTransaction(tr: Transaction, patches: Patch[]): Transaction {
+  const steps = patchToProsemirrorTransaction(patches)
+  steps.map(s => tr.step(s))
+  return tr
 }
