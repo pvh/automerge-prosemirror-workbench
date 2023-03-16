@@ -32,6 +32,7 @@ function toggleMarkCommand(mark: MarkType): Command {
 export function Editor<T>({ handle, attribute }: EditorProps<T>) {
   const editorRoot = useRef<HTMLDivElement>(null!)
 
+  
   useEffect(() => {
     let editorConfig = {
       schema,
@@ -47,6 +48,7 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
           "Mod-Shift-z": redo,
         }),
       ],
+      doc: schema.node("doc", null, schema.node("paragraph", null))
     }      
 
     let state = EditorState.create(editorConfig)
@@ -65,6 +67,7 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
 
     const onPatch = (arg: DocHandlePatchPayload<T>) => {
       try {
+        console.log("PATCH", arg)
         const tr = convertPatchToProsemirrorTransaction(view.state.tr, arg.patches)
         view.updateState(view.state.apply(tr)) 
       } catch (e) { console.log(e); debugger }
@@ -73,7 +76,6 @@ export function Editor<T>({ handle, attribute }: EditorProps<T>) {
 
     // move this out, we're in a then
     return () => {
-      // console.log("cleaning up")
       handle.off("patch", onPatch)
       view.destroy()
     }

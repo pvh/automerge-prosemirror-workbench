@@ -1,7 +1,7 @@
 
-import { Doc, Text, Patch, ChangeFn, ChangeOptions, Extend, PutPatch, InsertPatch } from "@automerge/automerge"
+import { Doc, Text, Patch, ChangeFn, ChangeOptions, Extend, PutPatch, InsertPatch, DelPatch } from "@automerge/automerge"
 import { unstable as AutomergeUnstable } from "@automerge/automerge"
-import { EditorState } from "prosemirror-state"
+import { EditorState, Transaction } from "prosemirror-state"
 import { schema } from "prosemirror-schema-basic"
 import { Fragment, Slice } from "prosemirror-model"
 
@@ -21,22 +21,58 @@ function prosemirrorPositionToAutomergePosition(
   return position - 1
 }
 
+// How to handle a complex replace with multiple inserts?
+// Prosemirror wants to send us a structured fragment with a from/to
+// I guess as long as we're in a single change block we'll only get one patch at the end
+// So we can do a delete?
+// Probably the principled thing to do would be to walk the Fragment,
+// build up a single splice, tracking marks alongside as we go, then commit the whole shebang with a single splice
+// followed by some .mark and .unmark calls
+
 function handleReplaceStep<T>(
   step: ReplaceStep,
-  doc: Doc<T>,
+  doc: Extend<T>,
   attribute: keyof T,
   state: EditorState
 ): void {
   console.log(step)
   const { from, to, slice } = step
   
-  const start = prosemirrorPositionToAutomergePosition(from)
-  const count = prosemirrorPositionToAutomergePosition(to) - prosemirrorPositionToAutomergePosition(from)
-  const newText = (slice.content.childCount == 0) ? "" : slice.content.textBetween(0, slice.size)
-  AutomergeUnstable.splice(doc, attribute as string, start, count, newText)
+  const length = to - from
+  let pos = step.from - 1
 
-  console.log(doc.text.join(","))
+  const node = slice.content.firstChild
+  
+  // Just deleting.
+  if (!node) {
+    AutomergeUnstable.splice(doc, attribute as string, pos, length, "")
+  }
+
+  // Inserting plaintext.
+  else if (node.isText) {
+    const newText = node.text
+    const count = node.nodeSize
+    AutomergeUnstable.splice(doc, attribute as string, pos, length, newText)
+    pos += count
+  }
+
+  // Inserting a paragraph break
+  else if (node.type.name === "paragraph") {
+    const string = ""
+    slice.content.forEach( p => {
+      const string = p.textContent + "\n\n"
+      AutomergeUnstable.splice(doc, attribute, pos, length, string)
+    })
+  }
+
+  else {
+    console.log(node)
+    debugger
+  }
+
+  console.log("Automerge after this: ", doc.text.join(","))
 }
+
 
 export const prosemirrorTransactionToAutomerge = <T>(
   steps: Step[],
@@ -53,11 +89,12 @@ export const prosemirrorTransactionToAutomerge = <T>(
     for (let step of steps) {
       console.log(step)
       if (step instanceof ReplaceStep) {
-        handleReplaceStep(step, doc as Doc<T>, attribute, state)
+        handleReplaceStep(step, doc as Extend<T>, attribute, state)
       } else {
         console.log(step)
+        debugger
         throw new Error(
-          "We encountered a Prosemirror transaction step type we can't handle."
+          "We encountered an Automerge step type we can't handle."
         )
       }
     }
@@ -68,20 +105,22 @@ function handlePutPatch(p: PutPatch): Step {
   throw new Error("Not implemented")
 }
 
-function patchContentToFragment(values: Value[]) {
-  const text = values.join("")
+/* const text = p.values.join("")
   const BLOCK_MARKER = "\n"
-  let blocks = text.split(BLOCK_MARKER)
+  const blocks = text.split(BLOCK_MARKER)
 
-  let depth = blocks.length > 1 ? 1 : 0
+  const depth = blocks.length > 1 ? 1 : 0
+  const from = p.path[p.path.length - 1] as number // uhhhh... maybe.
 
   // blocks: [ "text the first", "second text", "text" ]
   //          ^ no pgh break    ^ pgh break    ^ pgh break 2
 
   // the first text node here doesn't get a paragraph break
   // we should already have a paragraph that we're tacking this node onto
-  
-  /*
+  const nodes = []  
+
+  nodes.push(schema.node("paragraph", {}, []))
+
   let block = blocks.shift()
   if (!block) {
     let node = schema.node("paragraph", {}, [])
@@ -93,38 +132,61 @@ function patchContentToFragment(values: Value[]) {
       nodes.push(schema.node("paragraph", {}, schema.text(block)))
     }
   }
-  */
 
-  // get the head of the list
-  // if it's an empty value, push in a new empty paragraph
-  // ELSE
-    // if there's no more blocks, just append this text
-    // and if there are more blocks after this, put it into a new paragraph containing the text (!?)
+  blocks.forEach((block) => {
+    // FIXME this might be wrong for e.g. a paste with multiple empty paragraphs
+    if (block.length === 0) {
+      nodes.push(schema.node("paragraph", {}, []))
+      return
+    } else {
+      let node = schema.node("paragraph", {}, schema.text(block))
+      nodes.push(node)
+    }
+*/
+
+function handleInsertPatch(patch: InsertPatch): Step | undefined {
+  console.log("insertpatch", patch)
   
-  // NOW FOR THE REST
-    // empty blocks just push in an empty paragraph
-    // non-empty blocks push in a filled paragraph
-    
-  const nodes = blocks.map((block) => 
-    schema.node("paragraph", {}, block.length ? schema.text(block) : [])
-  )
+  if (patch.path[0] !== "text") { 
+    return
+  }
+  const from = patch.path[1] as number
 
-  return Fragment.fromArray(nodes)
+  const paragraphs = patch.values.join('').split('\n\n')
+  const nodes = paragraphs.map(t => schema.node("paragraph", null, t ? schema.text(t) : undefined))
+
+  let depth = 1
+  let fragment = Fragment.fromArray(nodes)
+  let slice = new Slice(fragment, depth, depth)
+  let step = new ReplaceStep(from+1, from+1, slice)
+
+  console.log("insertstep", step)
+  return step
 }
 
-function handleInsertPatch(p: InsertPatch): Step {
+function handleDelPatch(patch: DelPatch): Step | undefined {
+  console.log("delpatch", patch)
+  
+  if (patch.path[0] !== "text") { 
+    return
+  }
 
-  const depth = 0
-  const from = p.path[p.path.length - 1] as number // uhhhh... maybe.
+  const from = patch.path[1] as number
+  const to = from + (patch.length || 1) // !? orion, is this really right?
 
-  const fragment = patchContentToFragment(p.values)
+  let depth = 0
+  let fragment = Fragment.empty
+  let slice = new Slice(fragment, depth, depth)
+  let step = new ReplaceStep(from+1, to+1, slice)
 
-  return new ReplaceStep(from, from, new Slice(fragment, depth, depth))
+  console.log("delstep", step)
+  return step
 }
 
-export function patchToProsemirrorTransaction(patches: Patch[]): Step[] {
-  // we filter out put patches that recreate the entire document
-  return patches.filter(p => p.action !== "put").map((p) => {
+export function patchToProsemirrorTransaction(tr: Transaction, patches: Patch[]): Step[] {
+  console.log(tr.doc)
+
+  const steps = patches.filter(p => p.action !== "put").map((p) => {
     console.log('applying', p)
     switch(p.action) {
       case "put":
@@ -133,8 +195,14 @@ export function patchToProsemirrorTransaction(patches: Patch[]): Step[] {
       case "insert": 
         return handleInsertPatch(p)
         break
+      case "del":
+        return handleDelPatch(p)
       default:
         throw new Error("We encountered a Prosemirror transaction step type we can't handle.")
     }
-  })
+  }).filter(s => s !== undefined) as Step[]
+
+  steps.map(s => tr.step(s))
+  
+  return steps
 }
